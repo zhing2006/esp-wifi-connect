@@ -1,0 +1,13 @@
+dependencies:
+  idf: '>=5.3'
+description: 'This is a component for ESP-IDF to connect to Wi-Fi.'
+files:
+  exclude:
+  - .git
+  - dist
+  - build
+  - .vscode
+license: GPL-3.0
+repository: https://github.com/zhing2006/esp-wifi-connect.git
+url: https://github.com/zhing2006/esp-wifi-connect
+version: 0.1.0

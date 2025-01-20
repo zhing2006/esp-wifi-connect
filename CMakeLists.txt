@@ -1,0 +1,12 @@
+idf_component_register(
+  SRCS
+    "configurator.cc"
+  INCLUDE_DIRS
+    "include"
+  EMBED_TXTFILES
+    "assets/index.html"
+  REQUIRES
+    "esp_flash"
+    "esp_wifi"
+    "esp_http_server"
+)
