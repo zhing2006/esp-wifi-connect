@@ -60,11 +60,11 @@
   <body>
     <h1 data-i18n="wifi">Connect to WiFi</h1>
 
-    <form action="/submit" method="post" onsubmit="button.disabled = true;">
-      <div>
-        <h3 data-i18n="new_wifi">New WiFi</h3>
-        <p class="error" style="color: red; text-align: center;" id="error">
-        </p>
+    <div>
+      <h3 data-i18n="new_wifi">New WiFi</h3>
+      <p class="error" style="color: red; text-align: center;" id="error">
+      </p>
+      <form action="/submit" method="post" onsubmit="button.disabled = true;">
         <p>
           <label for="ssid">SSID:</label>
           <input type="text" id="ssid" name="ssid" required>
@@ -76,10 +76,9 @@
         <p style="text-align: center;">
           <input type="submit" value="Connect" id="button" data-i18n-value="connect">
         </p>
-        <p id="ap_list">
-        </p>
-      </div>
-    </form>
+      </form>
+      <p id="ap_list"></p>
+    </div>
 
     <script type="text/javascript">
       const button = document.getElementById('button');
