@@ -1,11 +1,85 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hello, World!</title>
+  <meta http-equiv="Content-Security-Policy" content="referrer no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>WiFi Configuration</title>
+  <style type="text/css">
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 5px;
+      background-color: #f0f0f0;
+    }
+    h1 {
+      text-align: center;
+    }
+    label {
+      display: block;
+    }
+    input {
+      width: 100%;
+      padding: 5px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+    }
+    input[type="submit"] {
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      padding: 10px;
+      cursor: pointer;
+    }
+    input[type="submit"]:hover {
+      background-color: #0056b3;
+    }
+    input[type="submit"]:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+
+    #ap_list {
+      margin-top: 20px;
+      border-top: 1px solid #ccc;
+      padding-top: 10px;
+    }
+    #ap_list a {
+      display: block;
+      margin-top: 5px;
+      color: #007bff;
+      text-decoration: none;
+    }
+    #ap_list a:hover {
+      text-decoration: underline;
+    }
+  </style>
 </head>
 <body>
-  <h1>Hello, World!</h1>
+  <h1 data-i18n="wifi-configuration">WiFi Configuration</h1>
+
+  <div>
+    <h3 data-i18n="new_wifi">New WiFi</h3>
+    <p class="error" style="color: red; text-align: center;" id="error">
+    </p>
+    <p>
+      <label for="ssid">SSID:</label>
+      <input type="text" id="ssid" name="ssid" required>
+    </p>
+    <p>
+      <label for="password" data-i18n="password">Password:</label>
+      <input type="password" id="password" name="password">
+    </p>
+    <p style="text-align: center;">
+      <input type="submit" value="Connect" id="button" data-i18n-value="connect">
+    </p>
+    <p id="ap_list">
+    </p>
+  </div>
+
+  <script type="text/javascript">
+  </script>
 </body>
 </html>
