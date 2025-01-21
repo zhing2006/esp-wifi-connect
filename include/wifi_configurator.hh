@@ -47,10 +47,18 @@ namespace wifi_connect {
     /// @brief Start the web server.
     void startWebServer();
 
+    /// @brief Connect to the WiFi.
+    /// @param ssid The SSID.
+    /// @param password The password.
+    /// @return True if the connection was successful, false otherwise.
+    bool connectToWifi(const char* ssid, const char* password);
+
     /// @brief The access point SSID.
     std::string ap_ssid_prefix;
     /// @brief The access point IP.
     std::string ap_ip;
+    /// @brief The WiFi event group.
+    EventGroupHandle_t event_group;
     /// @brief The any id event handler.
     esp_event_handler_instance_t any_id_handler;
     /// @brief The got ip event handler.
@@ -60,12 +68,23 @@ namespace wifi_connect {
     /// @brief The web server.
     httpd_handle_t web_server;
 
+    /// @brief Decode the URL.
+    /// @param url The URL to decode.
+    /// @return The decoded URL.
+    static std::string urlDecode(const std::string &url);
+
     /// @brief The WiFi event handler.
     /// @param arg The user argument.
     /// @param event_base The event object.
     /// @param event_id The event id.
     /// @param event_data The event data.
     static void wifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
+    /// @brief The got IP event handler.
+    /// @param arg The user argument.
+    /// @param event_base The event object.
+    /// @param event_id The event id.
+    /// @param event_data The event data.
+    static void gotIPEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
   };
 
 } // namespace wifi_connect

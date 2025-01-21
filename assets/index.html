@@ -1,85 +1,133 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="referrer no-referrer">
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-  <title>WiFi Configuration</title>
-  <style type="text/css">
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 5px;
-      background-color: #f0f0f0;
-    }
-    h1 {
-      text-align: center;
-    }
-    label {
-      display: block;
-    }
-    input {
-      width: 100%;
-      padding: 5px;
-      box-sizing: border-box;
-      border: 1px solid #ccc;
-      border-radius: 3px;
-    }
-    input[type="submit"] {
-      background-color: #007bff;
-      color: #fff;
-      border: none;
-      border-radius: 3px;
-      padding: 10px;
-      cursor: pointer;
-    }
-    input[type="submit"]:hover {
-      background-color: #0056b3;
-    }
-    input[type="submit"]:disabled {
-      background-color: #ccc;
-      cursor: not-allowed;
-    }
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="referrer no-referrer">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <title>WiFi Configuration</title>
+    <style type="text/css">
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 5px;
+        background-color: #f0f0f0;
+      }
+      h1 {
+        text-align: center;
+      }
+      label {
+        display: block;
+      }
+      input {
+        width: 100%;
+        padding: 5px;
+        box-sizing: border-box;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+      }
+      input[type="submit"] {
+        background-color: #007bff;
+        color: #fff;
+        border: none;
+        border-radius: 3px;
+        padding: 10px;
+        cursor: pointer;
+      }
+      input[type="submit"]:hover {
+        background-color: #0056b3;
+      }
+      input[type="submit"]:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
 
-    #ap_list {
-      margin-top: 20px;
-      border-top: 1px solid #ccc;
-      padding-top: 10px;
-    }
-    #ap_list a {
-      display: block;
-      margin-top: 5px;
-      color: #007bff;
-      text-decoration: none;
-    }
-    #ap_list a:hover {
-      text-decoration: underline;
-    }
-  </style>
-</head>
-<body>
-  <h1 data-i18n="wifi-configuration">WiFi Configuration</h1>
+      #ap_list {
+        margin-top: 20px;
+        border-top: 1px solid #ccc;
+        padding-top: 10px;
+      }
+      #ap_list a {
+        display: block;
+        margin-top: 5px;
+        color: #007bff;
+        text-decoration: none;
+      }
+      #ap_list a:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 data-i18n="wifi">Connect to WiFi</h1>
 
-  <div>
-    <h3 data-i18n="new_wifi">New WiFi</h3>
-    <p class="error" style="color: red; text-align: center;" id="error">
-    </p>
-    <p>
-      <label for="ssid">SSID:</label>
-      <input type="text" id="ssid" name="ssid" required>
-    </p>
-    <p>
-      <label for="password" data-i18n="password">Password:</label>
-      <input type="password" id="password" name="password">
-    </p>
-    <p style="text-align: center;">
-      <input type="submit" value="Connect" id="button" data-i18n-value="connect">
-    </p>
-    <p id="ap_list">
-    </p>
-  </div>
+    <form action="/submit" method="post" onsubmit="button.disabled = true;">
+      <div>
+        <h3 data-i18n="new_wifi">New WiFi</h3>
+        <p class="error" style="color: red; text-align: center;" id="error">
+        </p>
+        <p>
+          <label for="ssid">SSID:</label>
+          <input type="text" id="ssid" name="ssid" required>
+        </p>
+        <p>
+          <label for="password" data-i18n="password">Password:</label>
+          <input type="password" id="password" name="password">
+        </p>
+        <p style="text-align: center;">
+          <input type="submit" value="Connect" id="button" data-i18n-value="connect">
+        </p>
+        <p id="ap_list">
+        </p>
+      </div>
+    </form>
 
-  <script type="text/javascript">
-  </script>
-</body>
+    <script type="text/javascript">
+      const button = document.getElementById('button');
+      const error = document.getElementById('error');
+      const ssid = document.getElementById('ssid');
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('error')) {
+        error.textContent = params.get('error');
+      }
+      if (params.has('ssid')) {
+        ssid.value = params.get('ssid');
+      }
+
+      // Load the list of access points.
+      function loadAPList() {
+        if (button.disabled) {
+          return;
+        }
+
+        fetch('/scan')
+          .then(response => response.json())
+          .then(data => {
+            const apList = document.getElementById('ap_list');
+            apList.innerHTML = '<p>Select an 2.4G WiFi from the list below:</p>';
+            data.forEach(ap => {
+              const link = document.createElement('a');
+              link.href = '#';
+              link.textContent = ap.ssid + ' (' + ap.rssi + ' dBm)';
+              if (ap.authmode == 0) {
+                link.textContent += ' 🌐';
+              } else {
+                link.textContent += ' 🔒';
+              }
+              link.addEventListener('click', () => {
+                ssid.value = ap.ssid;
+              });
+              apList.appendChild(link);
+            });
+            setTimeout(loadAPList, 5000);
+          })
+          .catch(error => {
+            console.error('Error:', error);
+          });
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        loadAPList();
+      });
+    </script>
+  </body>
 </html>

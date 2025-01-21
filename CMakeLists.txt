@@ -6,6 +6,7 @@ idf_component_register(
     "include"
   EMBED_TXTFILES
     "assets/index.html"
+    "assets/done.html"
   REQUIRES
     "esp_http_server"
     "esp_wifi"

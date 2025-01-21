@@ -11,10 +11,14 @@
 #include <lwip/ip_addr.h>
 
 extern const char index_html_start[] asm("_binary_index_html_start");
+extern const char done_html_start[] asm("_binary_done_html_start");
 
 namespace wifi_connect {
 
   #define TAG "wifi_connect::Configurator"
+
+  #define WIFI_CONNECTED_BIT BIT0
+  #define WIFI_FAIL_BIT      BIT1
 
   ////////////////////////////////
   // Public methods
@@ -51,7 +55,7 @@ namespace wifi_connect {
       esp_event_handler_instance_register(
         IP_EVENT,
         IP_EVENT_STA_GOT_IP,
-        &Configurator::wifiEventHandler,
+        &Configurator::gotIPEventHandler,
         this,
         &got_ip_handler
       )
@@ -104,10 +108,13 @@ namespace wifi_connect {
     , got_ip_handler(nullptr)
     , dns_server()
     , web_server(nullptr)
-  {}
+  {
+    event_group = xEventGroupCreate();
+  }
 
   Configurator::~Configurator() {
     stop();
+    vEventGroupDelete(event_group);
   }
 
   void Configurator::startAP() {
@@ -157,13 +164,13 @@ namespace wifi_connect {
   }
 
   void Configurator::startWebServer() {
-    // Start the web server
+    // Start the web server.
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = 16;
     config.uri_match_fn = httpd_uri_match_wildcard;
     ESP_ERROR_CHECK(httpd_start(&web_server, &config));
 
-    // Register the index.html file
+    // Register the index.html file.
     httpd_uri_t index_html = {
       .uri = "/",
       .method = HTTP_GET,
@@ -175,10 +182,110 @@ namespace wifi_connect {
     };
     ESP_ERROR_CHECK(httpd_register_uri_handler(web_server, &index_html));
 
+    // Register the /scan URI
+    httpd_uri_t scan = {
+      .uri = "/scan",
+      .method = HTTP_GET,
+      .handler = [](httpd_req_t *req) -> esp_err_t {
+        esp_wifi_scan_start(nullptr, true);
+        uint16_t ap_num = 0;
+        esp_wifi_scan_get_ap_num(&ap_num);
+        wifi_ap_record_t *ap_records = (wifi_ap_record_t *)malloc(ap_num * sizeof(wifi_ap_record_t));
+        esp_wifi_scan_get_ap_records(&ap_num, ap_records);
+
+        // Send the scan results as JSON.
+        char buffer[128];
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr_chunk(req, "[");
+        for (int i = 0; i < ap_num; i++) {
+          ESP_LOGI(TAG, "SSID: %s, RSSI: %d, Authmode: %d",
+            (char *)ap_records[i].ssid, ap_records[i].rssi, ap_records[i].authmode);
+          snprintf(buffer, sizeof(buffer), "{\"ssid\":\"%s\",\"rssi\":%d,\"authmode\":%d}",
+            (char *)ap_records[i].ssid, ap_records[i].rssi, ap_records[i].authmode);
+          httpd_resp_sendstr_chunk(req, buffer);
+          if (i < ap_num - 1) {
+            httpd_resp_sendstr_chunk(req, ",");
+          }
+        }
+        httpd_resp_sendstr_chunk(req, "]");
+        httpd_resp_sendstr_chunk(req, NULL);
+        free(ap_records);
+        return ESP_OK;
+      },
+      .user_ctx = NULL
+    };
+    ESP_ERROR_CHECK(httpd_register_uri_handler(web_server, &scan));
+
+    // Register the form submission
+    httpd_uri_t form_submit = {
+      .uri = "/submit",
+      .method = HTTP_POST,
+      .handler = [](httpd_req_t *req) -> esp_err_t {
+        char buffer[128];
+        int ret = httpd_req_recv(req, buffer, sizeof(buffer));
+        if (ret <= 0) {
+          if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+            httpd_resp_send_408(req);
+          }
+          return ESP_FAIL;
+        }
+        buffer[ret] = '\0';
+        ESP_LOGI(TAG, "Received form data: %s", buffer);
+
+        std::string decoded = urlDecode(buffer);
+        ESP_LOGI(TAG, "Decoded form data: %s", decoded.c_str());
+
+        // Parse the form data.
+        char ssid[32], password[64];
+        password[0] = '\0';  // Initialize password as empty.
+
+        // First extract SSID
+        if (sscanf(decoded.c_str(), "ssid=%32[^&]", ssid) != 1) {
+          httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid SSID");
+          return ESP_FAIL;
+        }
+
+        // Then look for password if present.
+        auto pwd_pos = decoded.find("&password=");
+        if (pwd_pos != std::string::npos) {
+          strncpy(password, decoded.c_str() + pwd_pos + 10, sizeof(password) - 1);
+          password[sizeof(password) - 1] = '\0';  // Ensure null termination.
+        }
+
+        // Get this object from the user context.
+        auto *self = static_cast<Configurator *>(req->user_ctx);
+        if (!self->connectToWifi(ssid, password)) {
+          char error[] = "Failed to connect to WiFi";
+          char location[128];
+          snprintf(location, sizeof(location), "/?error=%s&ssid=%s", error, ssid);
+
+          httpd_resp_set_status(req, "302 Found");
+          httpd_resp_set_hdr(req, "Location", location);
+          httpd_resp_send(req, NULL, 0);
+          return ESP_OK;
+        }
+
+        // Set HTML response.
+        httpd_resp_set_status(req, "200 OK");
+        httpd_resp_set_type(req, "text/html");
+        httpd_resp_send(req, done_html_start, HTTPD_RESP_USE_STRLEN);
+
+        // Restart after 3 seconds.
+        xTaskCreate([](void *self) {
+          ESP_LOGI(TAG, "Restarting in 3 seconds...");
+          vTaskDelay(pdMS_TO_TICKS(3000));
+          esp_restart();
+        }, "restart_task", 4096, self, 5, NULL);
+        return ESP_OK;
+      },
+      .user_ctx = this
+    };
+    ESP_ERROR_CHECK(httpd_register_uri_handler(web_server, &form_submit));
+
     auto captive_portal_handler = [](httpd_req_t *req) -> esp_err_t {
       auto *self = static_cast<Configurator *>(req->user_ctx);
       std::string url = self->getWebServerUrl() + "/";
-      // Set content type to prevent browser warnings
+      // Set content type to prevent browser warnings.
       httpd_resp_set_type(req, "text/html");
       httpd_resp_set_status(req, "302 Found");
       httpd_resp_set_hdr(req, "Location", url.c_str());
@@ -186,7 +293,7 @@ namespace wifi_connect {
       return ESP_OK;
     };
 
-    // Register all common captive portal detection endpoints
+    // Register all common captive portal detection endpoints.
     const char* captive_portal_urls[] = {
       "/hotspot-detect.html",     // Apple
       "/generate_204",            // Android
@@ -213,8 +320,59 @@ namespace wifi_connect {
     ESP_LOGI(TAG, "Web server started");
   }
 
+  /// @brief Connect to the WiFi.
+  /// @param ssid The SSID.
+  /// @param password The password.
+  /// @return True if the connection was successful, false otherwise.
+  bool Configurator::connectToWifi(const char* ssid, const char* password) {
+    wifi_config_t wifi_config;
+    bzero(&wifi_config, sizeof(wifi_config));
+    strcpy((char *)wifi_config.sta.ssid, ssid);
+    strcpy((char *)wifi_config.sta.password, password);
+    wifi_config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    wifi_config.sta.failure_retry_cnt = 1;
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+
+    auto ret = esp_wifi_connect();
+    if (ret != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to connect to WiFi, error: %d", ret);
+      return false;
+    }
+    ESP_LOGI(TAG, "Connecting to WiFi %s", ssid);
+
+    // Wait for the connection to complete for 10 seconds.
+    EventBits_t bits = xEventGroupWaitBits(event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));
+    if (bits & WIFI_CONNECTED_BIT) {
+      ESP_LOGI(TAG, "Connected to WiFi %s", ssid);
+      return true;
+    } else {
+      ESP_LOGE(TAG, "Failed to connect to WiFi %s", ssid);
+      return false;
+    }
+  }
+
+  std::string Configurator::urlDecode(const std::string &url) {
+    std::string decoded;
+    for (size_t i = 0; i < url.length(); ++i) {
+      if (url[i] == '%') {
+        char hex[3];
+        hex[0] = url[i + 1];
+        hex[1] = url[i + 2];
+        hex[2] = '\0';
+        char ch = static_cast<char>(std::stoi(hex, nullptr, 16));
+        decoded += ch;
+        i += 2;
+      } else if (url[i] == '+') {
+        decoded += ' ';
+      } else {
+        decoded += url[i];
+      }
+    }
+    return decoded;
+  }
+
   void Configurator::wifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-    // auto configurator = static_cast<Configurator*>(arg);
+    auto self = static_cast<Configurator*>(arg);
 
     if (event_id == WIFI_EVENT_AP_STACONNECTED) {
       wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
@@ -222,6 +380,20 @@ namespace wifi_connect {
     } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
       wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
       ESP_LOGI(TAG, "Station " MACSTR " left, AID=%d", MAC2STR(event->mac), event->aid);
+    } else if (event_id == WIFI_EVENT_STA_CONNECTED) {
+      xEventGroupSetBits(self->event_group, WIFI_CONNECTED_BIT);
+    } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
+      xEventGroupSetBits(self->event_group, WIFI_FAIL_BIT);
+    }
+  }
+
+  void Configurator::gotIPEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+    auto self = static_cast<Configurator*>(arg);
+
+    if (event_id == IP_EVENT_STA_GOT_IP) {
+      ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+      ESP_LOGI(TAG, "Got IP:" IPSTR, IP2STR(&event->ip_info.ip));
+      xEventGroupSetBits(self->event_group, WIFI_CONNECTED_BIT);
     }
   }
 
