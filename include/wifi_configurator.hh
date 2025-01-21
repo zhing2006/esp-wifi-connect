@@ -3,7 +3,8 @@
 
 #include <string>
 
-#include "esp_event.h"
+#include <esp_event.h>
+#include <esp_http_server.h>
 
 #include "dns_server.hh"
 
@@ -24,6 +25,10 @@ namespace wifi_connect {
     /// @param ap_ip The access point IP.
     void setAPIP(std::string ap_ip);
 
+    /// @brief Get the web server URL.
+    /// @return The web server URL.
+    std::string getWebServerUrl() const;
+
     /// @brief Start the configuration process.
     void start();
 
@@ -39,6 +44,9 @@ namespace wifi_connect {
     /// @brief Start the access point.
     void startAP();
 
+    /// @brief Start the web server.
+    void startWebServer();
+
     /// @brief The access point SSID.
     std::string ap_ssid_prefix;
     /// @brief The access point IP.
@@ -49,6 +57,8 @@ namespace wifi_connect {
     esp_event_handler_instance_t got_ip_handler;
     /// @brief The DNS server.
     DNSServer dns_server;
+    /// @brief The web server.
+    httpd_handle_t web_server;
 
     /// @brief The WiFi event handler.
     /// @param arg The user argument.

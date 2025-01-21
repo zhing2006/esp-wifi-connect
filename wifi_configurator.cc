@@ -4,12 +4,13 @@
 
 #include <esp_err.h>
 #include <esp_log.h>
-#include <esp_event.h>
 #include <esp_mac.h>
 #include <esp_netif.h>
 #include <esp_wifi.h>
 
 #include <lwip/ip_addr.h>
+
+extern const char index_html_start[] asm("_binary_index_html_start");
 
 namespace wifi_connect {
 
@@ -29,6 +30,10 @@ namespace wifi_connect {
 
   void Configurator::setAPIP(std::string ap_ip) {
     this->ap_ip = std::move(ap_ip);
+  }
+
+  std::string Configurator::getWebServerUrl() const {
+    return "http://" + ap_ip;
   }
 
   void Configurator::start() {
@@ -53,9 +58,24 @@ namespace wifi_connect {
     );
 
     startAP();
+    startWebServer();
   }
 
   void Configurator::stop() {
+    if (web_server != nullptr) {
+      httpd_stop(web_server);
+      web_server = nullptr;
+    }
+
+    dns_server.stop();
+
+    esp_wifi_stop();
+
+    auto netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    if (netif != NULL) {
+      esp_netif_destroy(netif);
+    }
+
     if (any_id_handler) {
       esp_event_handler_instance_unregister(
         WIFI_EVENT,
@@ -83,10 +103,10 @@ namespace wifi_connect {
     , any_id_handler(nullptr)
     , got_ip_handler(nullptr)
     , dns_server()
+    , web_server(nullptr)
   {}
 
   Configurator::~Configurator() {
-    dns_server.stop();
     stop();
   }
 
@@ -134,6 +154,63 @@ namespace wifi_connect {
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "Access point started: SSID=%s, IP=%s", ssid, ap_ip.c_str());
+  }
+
+  void Configurator::startWebServer() {
+    // Start the web server
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.max_uri_handlers = 16;
+    config.uri_match_fn = httpd_uri_match_wildcard;
+    ESP_ERROR_CHECK(httpd_start(&web_server, &config));
+
+    // Register the index.html file
+    httpd_uri_t index_html = {
+      .uri = "/",
+      .method = HTTP_GET,
+      .handler = [](httpd_req_t *req) -> esp_err_t {
+        httpd_resp_send(req, index_html_start, strlen(index_html_start));
+        return ESP_OK;
+      },
+      .user_ctx = NULL
+    };
+    ESP_ERROR_CHECK(httpd_register_uri_handler(web_server, &index_html));
+
+    auto captive_portal_handler = [](httpd_req_t *req) -> esp_err_t {
+      auto *self = static_cast<Configurator *>(req->user_ctx);
+      std::string url = self->getWebServerUrl() + "/";
+      // Set content type to prevent browser warnings
+      httpd_resp_set_type(req, "text/html");
+      httpd_resp_set_status(req, "302 Found");
+      httpd_resp_set_hdr(req, "Location", url.c_str());
+      httpd_resp_send(req, NULL, 0);
+      return ESP_OK;
+    };
+
+    // Register all common captive portal detection endpoints
+    const char* captive_portal_urls[] = {
+      "/hotspot-detect.html",     // Apple
+      "/generate_204",            // Android
+      "/mobile/status.php",       // Android
+      "/check_network_status.txt",// Windows
+      "/ncsi.txt",                // Windows
+      "/fwlink/",                 // Microsoft
+      "/connectivity-check.html", // Firefox
+      "/success.txt",             // Various
+      "/portal.html",             // Various
+      "/library/test/success.html"// Apple
+    };
+
+    for (const auto& url : captive_portal_urls) {
+      httpd_uri_t redirect_uri = {
+        .uri = url,
+        .method = HTTP_GET,
+        .handler = captive_portal_handler,
+        .user_ctx = this
+      };
+      ESP_ERROR_CHECK(httpd_register_uri_handler(web_server, &redirect_uri));
+    }
+
+    ESP_LOGI(TAG, "Web server started");
   }
 
   void Configurator::wifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
