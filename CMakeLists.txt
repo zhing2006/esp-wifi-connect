@@ -2,6 +2,7 @@ idf_component_register(
   SRCS
     "dns_server.cc"
     "wifi_configurator.cc"
+    "wifi_connector.cc"
   INCLUDE_DIRS
     "include"
   EMBED_TXTFILES

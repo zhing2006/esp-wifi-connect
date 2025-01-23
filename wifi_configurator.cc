@@ -10,15 +10,15 @@
 
 #include <lwip/ip_addr.h>
 
+#define WIFI_CONNECTED_BIT BIT0
+#define WIFI_FAIL_BIT      BIT1
+
 extern const char index_html_start[] asm("_binary_index_html_start");
 extern const char done_html_start[] asm("_binary_done_html_start");
 
 namespace wifi_connect {
 
   #define TAG "wifi_connect::Configurator"
-
-  #define WIFI_CONNECTED_BIT BIT0
-  #define WIFI_FAIL_BIT      BIT1
 
   ////////////////////////////////
   // Public methods
@@ -75,6 +75,8 @@ namespace wifi_connect {
 
     esp_wifi_stop();
 
+    esp_wifi_deinit();
+
     auto netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
     if (netif != NULL) {
       esp_netif_destroy(netif);
@@ -124,9 +126,6 @@ namespace wifi_connect {
     // Generate the SSID.
     char ssid[32];
     snprintf(ssid, sizeof(ssid), "%s%02X%02X%02X", ap_ssid_prefix.c_str(), mac[3], mac[4], mac[5]);
-
-    // Initialize the TCP/IP stack.
-    ESP_ERROR_CHECK(esp_netif_init());
 
     // Create the WiFi access point.
     auto netif = esp_netif_create_default_wifi_ap();
