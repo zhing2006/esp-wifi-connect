@@ -32,6 +32,17 @@ namespace wifi_connect {
     this->ap_ssid_prefix = std::move(ap_ssid_prefix);
   }
 
+  std::string Configurator::getAPSSID() const {
+    // Get the MAC address.
+    uint8_t mac[6];
+    ESP_ERROR_CHECK(esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP));
+    // Generate the SSID.
+    char ssid[32];
+    snprintf(ssid, sizeof(ssid), "%s%02X%02X%02X", ap_ssid_prefix.c_str(), mac[3], mac[4], mac[5]);
+
+    return ssid;
+  }
+
   void Configurator::setAPIP(std::string ap_ip) {
     this->ap_ip = std::move(ap_ip);
   }
@@ -120,12 +131,8 @@ namespace wifi_connect {
   }
 
   void Configurator::startAP() {
-    // Get the MAC address.
-    uint8_t mac[6];
-    ESP_ERROR_CHECK(esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP));
     // Generate the SSID.
-    char ssid[32];
-    snprintf(ssid, sizeof(ssid), "%s%02X%02X%02X", ap_ssid_prefix.c_str(), mac[3], mac[4], mac[5]);
+    std::string ssid = getAPSSID();
 
     // Create the WiFi access point.
     auto netif = esp_netif_create_default_wifi_ap();
@@ -148,8 +155,8 @@ namespace wifi_connect {
 
     // Set the WiFi configuration.
     wifi_config_t wifi_config = {};
-    strcpy((char *)wifi_config.ap.ssid, ssid);
-    wifi_config.ap.ssid_len = strlen(ssid);
+    strcpy((char *)wifi_config.ap.ssid, ssid.c_str());
+    wifi_config.ap.ssid_len = ssid.length();
     wifi_config.ap.max_connection = 4;
     wifi_config.ap.authmode = WIFI_AUTH_OPEN;
 
@@ -160,7 +167,7 @@ namespace wifi_connect {
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "Access point started: SSID=%s, IP=%s", ssid, ap_ip.c_str());
+    ESP_LOGI(TAG, "Access point started: SSID=%s, IP=%s", ssid.c_str(), ap_ip.c_str());
   }
 
   void Configurator::startWebServer() {

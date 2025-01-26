@@ -21,6 +21,10 @@ namespace wifi_connect {
     /// @param ap_ssid_prefix The access point SSID prefix.
     void setAPSSIDPrefix(std::string ap_ssid_prefix);
 
+    /// @brief Get the access point SSID.
+    /// @return The access point SSID.
+    std::string getAPSSID() const;
+
     /// @brief Set the access point IP.
     /// @param ap_ip The access point IP.
     void setAPIP(std::string ap_ip);

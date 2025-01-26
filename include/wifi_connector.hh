@@ -15,6 +15,10 @@ namespace wifi_connect {
     /// @return The instance of the connector.
     static Connector& getInstance();
 
+    /// @brief Check if the WiFi connection information is stored.
+    /// @return True if the information is stored, false otherwise.
+    bool isStored();
+
     /// @brief Connect to the WiFi.
     /// Any the SSID and password can be null.
     /// In this case, the connector will try to connect to the last known network.

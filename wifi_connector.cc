@@ -26,6 +26,21 @@ namespace wifi_connect {
     return instance;
   }
 
+  bool Connector::isStored() {
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    wifi_config_t wifi_config;
+    esp_err_t err = esp_wifi_get_config(WIFI_IF_STA, &wifi_config);
+
+    ESP_ERROR_CHECK(esp_wifi_deinit());
+
+    if (err == ESP_OK) {
+      return strlen(reinterpret_cast<const char*>(wifi_config.sta.ssid)) > 0;
+    }
+    return false;
+  }
+
   bool Connector::connect(wifi_auth_mode_t auth_mode, const char* ssid, const char* password) {
     ESP_ERROR_CHECK(
       esp_event_handler_instance_register(
