@@ -11,6 +11,8 @@
 #include <esp_netif.h>
 #include <esp_wifi.h>
 
+#include <lwip/inet.h>
+
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
 
@@ -175,7 +177,10 @@ namespace wifi_connect {
     auto self = static_cast<Connector*>(arg);
 
     if (event_id == IP_EVENT_STA_GOT_IP) {
-      ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+      ip_event_got_ip_t* event = (ip_event_got_ip_t *)event_data;
+      char ip_str[16];
+      esp_ip4addr_ntoa(&event->ip_info.ip, ip_str, sizeof(ip_str));
+      self->ip = ip_str;
       ESP_LOGI(TAG, "Got IP:" IPSTR, IP2STR(&event->ip_info.ip));
       xEventGroupSetBits(self->event_group, WIFI_CONNECTED_BIT);
     }
