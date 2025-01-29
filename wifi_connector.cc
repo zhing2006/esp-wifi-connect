@@ -167,7 +167,8 @@ namespace wifi_connect {
     auto self = static_cast<Connector*>(arg);
 
     if (event_id == WIFI_EVENT_STA_CONNECTED) {
-      xEventGroupSetBits(self->event_group, WIFI_CONNECTED_BIT);
+      // Set the WiFi connected bit only when the IP is obtained.
+      // xEventGroupSetBits(self->event_group, WIFI_CONNECTED_BIT);
     } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
       xEventGroupSetBits(self->event_group, WIFI_FAIL_BIT);
     }
